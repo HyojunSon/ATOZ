@@ -4,3 +4,4 @@ librosa
 sounddevice
 numpy
 PyAudio==0.2.11
+scipy
