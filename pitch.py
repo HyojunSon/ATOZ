@@ -45,9 +45,9 @@ fig, ax = plt.subplots()
 line, = ax.plot([], [])
 ax.set_xlim(0, 100)
 ax.set_ylim(0, 1000)
-ax.set_xlabel("시간 (프레임)")
-ax.set_ylabel("피치 (Hz)")
-ax.set_title("실시간 음성 피치")
+ax.set_xlabel("Time (Frame)")
+ax.set_ylabel("Pitch (Hz)")
+ax.set_title("Realtime Pitch Graph")
 graph = st.pyplot(fig)
 
 # 실시간 분석 및 그래프 업데이트
