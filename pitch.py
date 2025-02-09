@@ -41,11 +41,7 @@ webrtc_ctx = webrtc_streamer(
     media_stream_constraints={"video": False, "audio": True},
 )
 
-# 실시간 분석 및 그래프 업데이트
-if webrtc_ctx.state.playing:
-    pitches = []
-    while True:
-        
+
 # 그래프 초기화
 fig, ax = plt.subplots()
 line, = ax.plot([], [])
