@@ -3,3 +3,4 @@ matplotlib
 librosa
 sounddevice
 numpy
+portaudio
