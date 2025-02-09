@@ -1,39 +1,74 @@
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
 import librosa
 import sounddevice as sd
+import matplotlib.pyplot as plt
+from scipy.io import wavfile
 
-st.title("실시간 음성 피치 분석")
+# 마이크 설정
+SAMPLE_RATE = 44100
+BLOCK_SIZE = 2048
 
-SAMPLE_RATE = 22050
-DURATION = 5  # 녹음 시간 (초)
+# Streamlit 앱 설정
+st.title("실시간 음성 피치 분석기")
 
-if st.button("녹음 시작"):
-    st.write("5초 동안 말씀해 주세요...")
-    audio = sd.rec(int(SAMPLE_RATE * DURATION), samplerate=SAMPLE_RATE, channels=1)
-    sd.wait()
-    st.write("녹음 완료!")
+# 마이크 권한 요청
+if st.button("마이크 권한 요청"):
+    try:
+        sd.query_devices()
+        st.success("마이크 권한이 승인되었습니다.")
+    except sd.PortAudioError:
+        st.error("마이크 권한을 승인해주세요.")
 
-    # 피치 추출
-    pitches, magnitudes = librosa.piptrack(y=audio.flatten(), sr=SAMPLE_RATE)
-    
-    # 시간 축 생성
-    times = librosa.times_like(pitches)
-    
-    # 각 프레임에서 가장 강한 피치 선택
-    pitches_filtered = np.zeros_like(times)
-    for i in range(len(times)):
-        index = magnitudes[:, i].argmax()
-        pitches_filtered[i] = pitches[index, i]
-    
-    # 그래프 그리기
-    fig, ax = plt.subplots()
-    ax.plot(times, pitches_filtered)
-    ax.set_xlabel("시간 (초)")
-    ax.set_ylabel("피치 (Hz)")
-    ax.set_title("실시간 음성 피치 분석")
-    
-    st.pyplot(fig)
+# 실시간 피치 분석 함수
+def analyze_pitch(indata, frames, time, status):
+    if status:
+        print(status)
+    if any(indata):
+        signal = np.frombuffer(indata, dtype=np.float32)
+        pitch, _ = librosa.piptrack(y=signal, sr=SAMPLE_RATE)
+        pitch = pitch[pitch > 0]
+        if len(pitch) > 0:
+            mean_pitch = np.mean(pitch)
+            st.session_state.pitches.append(mean_pitch)
+            st.session_state.times.append(time)
 
-st.write("'녹음 시작' 버튼을 클릭하여 음성을 녹음하고 피치 그래프를 확인하세요.")
+# 그래프 초기화
+if 'pitches' not in st.session_state:
+    st.session_state.pitches = []
+    st.session_state.times = []
+
+# 실시간 분석 시작/중지
+if st.button("분석 시작/중지"):
+    if 'stream' not in st.session_state:
+        st.session_state.stream = sd.InputStream(callback=analyze_pitch, channels=1, samplerate=SAMPLE_RATE, blocksize=BLOCK_SIZE)
+        st.session_state.stream.start()
+        st.success("분석이 시작되었습니다.")
+    else:
+        st.session_state.stream.stop()
+        del st.session_state.stream
+        st.warning("분석이 중지되었습니다.")
+
+# 실시간 그래프 표시
+fig, ax = plt.subplots()
+line, = ax.plot(st.session_state.times, st.session_state.pitches)
+ax.set_xlabel("시간 (초)")
+ax.set_ylabel("피치 (Hz)")
+ax.set_title("실시간 음성 피치")
+
+graph = st.pyplot(fig)
+
+# 그래프 업데이트
+def update_graph():
+    line.set_xdata(st.session_state.times)
+    line.set_ydata(st.session_state.pitches)
+    ax.relim()
+    ax.autoscale_view()
+    graph.pyplot(fig)
+
+# 주기적으로 그래프 업데이트
+if 'stream' in st.session_state:
+    st.empty()
+    while True:
+        update_graph()
+        st.experimental_rerun()
