@@ -3,5 +3,4 @@ matplotlib
 librosa
 sounddevice
 numpy
-portaudio19-dev
-python3-pyaudio
+PyAudio==0.2.11
