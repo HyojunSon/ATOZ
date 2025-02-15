@@ -35,7 +35,7 @@ webrtc_ctx = webrtc_streamer(
     audio_processor_factory=AudioProcessor,
     media_stream_constraints={"audio": True, "video": False},
     async_processing=True,
-    on_error=on_error,
+    # on_error=on_error,
 )
 
 if webrtc_ctx.state.playing:
