@@ -4,6 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import librosa
 
+navigator.mediaDevices.getUserMedia({ audio: true })
+  .then(stream => {
+    console.log('Got MediaStream:', stream);
+  })
+  .catch(error => {
+    console.error('Error accessing media devices.', error);
+  });
+
 class AudioProcessor(AudioProcessorBase):
     def __init__(self):
         self.sr = 44100
