@@ -16,6 +16,7 @@ class AudioProcessor(AudioProcessorBase):
 
     def recv(self, frame):
         audio_data = np.frombuffer(frame.to_ndarray(), dtype=np.int16)
+        st.write(f"Received audio data: {audio_data.shape}")
         pitch = librosa.core.pitch.yin(audio_data.astype(float), fmin=50, fmax=500)
         self.line.set_ydata(pitch)
         self.fig.canvas.draw()
@@ -35,3 +36,8 @@ webrtc_ctx = webrtc_streamer(
 
 if webrtc_ctx.state.playing:
     st.pyplot(webrtc_ctx.audio_processor.fig)
+else:
+    st.write("WebRTC 상태: 연결되지 않음")
+
+# WebRTC 연결 상태 확인
+st.write(f"WebRTC 상태: {webrtc_ctx.state}")
