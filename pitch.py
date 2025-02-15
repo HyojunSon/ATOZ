@@ -1,120 +1,90 @@
-# import streamlit as st
-# import numpy as np
-# import matplotlib.pyplot as plt
-# import sounddevice as sd
-# from scipy.signal import find_peaks
-
-# # 피치 계산 함수
-# def pitch_detection(audio, fs):
-#     # 오디오 신호의 FFT를 계산
-#     freqs = np.fft.fftfreq(len(audio), 1/fs)
-#     fft = np.fft.fft(audio)
-    
-#     # 주파수의 절대값을 취함
-#     magnitude = np.abs(fft)
-    
-#     # 피크 찾기
-#     peaks, _ = find_peaks(magnitude, height=0)
-#     if len(peaks) > 0:
-#         # 가장 큰 피크의 주파수 반환
-#         peak_freq = freqs[peaks][np.argmax(magnitude[peaks])]
-#         return peak_freq
-#     return 0
-
-# # 스트림릿 앱 설정
-# st.title("Real-time Pitch Detection")
-# st.write("Press the button below to start recording audio.")
-
-# # 오디오 녹음 버튼
-# if st.button("Start Recording"):
-#     fs = 44100  # 샘플링 주파수
-#     duration = 5  # 녹음 시간 (초)
-    
-#     st.write("Recording...")
-#     audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float64', device=1)
-#     sd.wait()  # 녹음이 끝날 때까지 대기
-#     st.write("Recording finished.")
-    
-#     # 피치 계산
-#     pitch = pitch_detection(audio.flatten(), fs)
-    
-#     # 피치 그래프 그리기
-#     plt.figure(figsize=(10, 4))
-#     plt.plot(audio)
-#     plt.title(f"Detected Pitch: {pitch:.2f} Hz")
-#     plt.xlabel("Samples")
-#     plt.ylabel("Amplitude")
-#     st.pyplot(plt)
-
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-import pyaudio
-import wave
-from scipy.signal import find_peaks
+import base64
+import time
 
-# 피치 계산 함수
-def pitch_detection(audio, fs):
-    # 오디오 신호의 FFT를 계산
-    freqs = np.fft.fftfreq(len(audio), 1/fs)
-    fft = np.fft.fft(audio)
-    
-    # 주파수의 절대값을 취함
-    magnitude = np.abs(fft)
-    
-    # 피크 찾기
-    peaks, _ = find_peaks(magnitude, height=0)
-    if len(peaks) > 0:
-        # 가장 큰 피크의 주파수 반환
-        peak_freq = freqs[peaks][np.argmax(magnitude[peaks])]
-        return peak_freq
-    return 0
+# JavaScript를 사용하여 오디오 녹음
+def audio_recorder():
+    st.markdown("""
+    <script>
+    let mediaRecorder;
+    let audioChunks = [];
+    let audioContext;
+    let analyser;
+    let dataArray;
 
-# 오디오 녹음 함수
-def record_audio(duration, fs):
-    p = pyaudio.PyAudio()
-    
-    # 스트림 열기
-    stream = p.open(format=pyaudio.paFloat32,
-                    channels=1,
-                    rate=fs,
-                    input=True,
-                    frames_per_buffer=1024)
+    async function startRecording() {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.start();
 
-    frames = []
-    
-    st.write("Recording...")
-    for _ in range(0, int(fs / 1024 * duration)):
-        data = stream.read(1024)
-        frames.append(np.frombuffer(data, dtype=np.float32))
-    
-    st.write("Recording finished.")
-    
-    # 스트림 종료
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
-    
-    return np.concatenate(frames)
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+        analyser.fftSize = 2048;
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        mediaRecorder.ondataavailable = function(event) {
+            audioChunks.push(event.data);
+        };
+
+        function updateGraph() {
+            analyser.getByteFrequencyData(dataArray);
+            const audioData = Array.from(dataArray);
+            const audioDataBase64 = btoa(JSON.stringify(audioData));
+            fetch('/update_graph', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ audioData: audioDataBase64 }),
+            });
+            requestAnimationFrame(updateGraph);
+        }
+
+        updateGraph();
+    }
+
+    function stopRecording() {
+        mediaRecorder.stop();
+        audioContext.close();
+    }
+
+    window.startRecording = startRecording;
+    window.stopRecording = stopRecording;
+    </script>
+    """, unsafe_allow_html=True)
+
+    st.button("Start Recording", on_click=startRecording)
+    st.button("Stop Recording", on_click=stopRecording)
 
 # 스트림릿 앱 설정
-st.title("Real-time Pitch Detection with PyAudio")
-st.write("Press the button below to start recording audio.")
+st.title("Real-time Audio Visualization")
+st.write("Press the buttons below to start and stop recording audio.")
 
 # 오디오 녹음 버튼
-if st.button("Start Recording"):
-    fs = 44100  # 샘플링 주파수
-    duration = 5  # 녹음 시간 (초)
-    
-    audio = record_audio(duration, fs)
-    
-    # 피치 계산
-    pitch = pitch_detection(audio, fs)
-    
-    # 피치 그래프 그리기
+audio_recorder()
+
+# 그래프 업데이트
+if st.session_state.get("audio_data"):
+    audio_data = st.session_state.audio_data
+    audio_array = np.frombuffer(base64.b64decode(audio_data), dtype=np.uint8)
+
+    # 그래프 그리기
     plt.figure(figsize=(10, 4))
-    plt.plot(audio)
-    plt.title(f"Detected Pitch: {pitch:.2f} Hz")
-    plt.xlabel("Samples")
+    plt.bar(range(len(audio_array)), audio_array)
+    plt.title("Real-time Audio Data")
+    plt.xlabel("Frequency Bins")
     plt.ylabel("Amplitude")
     st.pyplot(plt)
+
+# 오디오 데이터 업로드 처리
+def update_graph():
+    if st.session_state.get("audio_data"):
+        st.session_state.audio_data = st.session_state.audio_data
+    else:
+        st.session_state.audio_data = None
+
+st.experimental_singleton(update_graph)
