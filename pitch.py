@@ -9,18 +9,36 @@ import threading
 st.title("실시간 피치 그래프")
 st.write("음성 데이터를 입력 받아 실시간으로 피치 그래프를 그립니다.")
 
+# PyAudio 인스턴스 생성
+p = pyaudio.PyAudio()
+
+# 기본 입력 장치 인덱스 설정 (필요에 따라 변경)
+input_device_index = None
+
+# 기본 입력 장치 인덱스가 None인 경우, 첫 번째 입력 장치를 사용
+if input_device_index is None:
+    for i in range(p.get_device_count()):
+        info = p.get_device_info_by_index(i)
+        if info['maxInputChannels'] > 0:
+            input_device_index = i
+            break
+
+# 기본 입력 장치 인덱스가 설정되지 않은 경우 오류 발생
+if input_device_index is None:
+    raise ValueError("No input device found")
+
 # PyAudio 설정
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
 CHUNK = 1024
 
-p = pyaudio.PyAudio()
-
+# 스트림 열기
 stream = p.open(format=FORMAT,
                 channels=CHANNELS,
                 rate=RATE,
                 input=True,
+                input_device_index=input_device_index,
                 frames_per_buffer=CHUNK)
 
 # 실시간 피치 그래프 그리기
