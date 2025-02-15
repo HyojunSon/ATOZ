@@ -1,90 +1,64 @@
 import streamlit as st
+import sounddevice as sd
 import numpy as np
 import matplotlib.pyplot as plt
-import base64
-import time
-
-# JavaScript를 사용하여 오디오 녹음
-def audio_recorder():
-    st.markdown("""
-    <script>
-    let mediaRecorder;
-    let audioChunks = [];
-    let audioContext;
-    let analyser;
-    let dataArray;
-
-    async function startRecording() {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.start();
-
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        const source = audioContext.createMediaStreamSource(stream);
-        source.connect(analyser);
-        analyser.fftSize = 2048;
-        dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-        mediaRecorder.ondataavailable = function(event) {
-            audioChunks.push(event.data);
-        };
-
-        function updateGraph() {
-            analyser.getByteFrequencyData(dataArray);
-            const audioData = Array.from(dataArray);
-            const audioDataBase64 = btoa(JSON.stringify(audioData));
-            fetch('/update_graph', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ audioData: audioDataBase64 }),
-            });
-            requestAnimationFrame(updateGraph);
-        }
-
-        updateGraph();
-    }
-
-    function stopRecording() {
-        mediaRecorder.stop();
-        audioContext.close();
-    }
-
-    window.startRecording = startRecording;
-    window.stopRecording = stopRecording;
-    </script>
-    """, unsafe_allow_html=True)
-
-    st.button("Start Recording", on_click=startRecording)
-    st.button("Stop Recording", on_click=stopRecording)
+from scipy.signal import find_peaks
 
 # 스트림릿 앱 설정
-st.title("Real-time Audio Visualization")
-st.write("Press the buttons below to start and stop recording audio.")
+st.set_page_config(page_title="Real-time Pitch Detection", layout="wide")
 
-# 오디오 녹음 버튼
-audio_recorder()
+st.title("Real-time Pitch Detection")
+st.write("This app captures audio in real-time and plots the pitch graph.")
 
-# 그래프 업데이트
-if st.session_state.get("audio_data"):
-    audio_data = st.session_state.audio_data
-    audio_array = np.frombuffer(base64.b64decode(audio_data), dtype=np.uint8)
+# 샘플링 레이트와 버퍼 크기 설정
+SAMPLING_RATE = 44100
+BUFFER_SIZE = 2048
 
-    # 그래프 그리기
-    plt.figure(figsize=(10, 4))
-    plt.bar(range(len(audio_array)), audio_array)
-    plt.title("Real-time Audio Data")
-    plt.xlabel("Frequency Bins")
-    plt.ylabel("Amplitude")
-    st.pyplot(plt)
+# 실시간 오디오 스트림 콜백 함수
+def audio_callback(indata, frames, time, status):
+    if status:
+        st.warning(f"Warning: {status}")
+    audio_buffer.extend(indata[:, 0])
 
-# 오디오 데이터 업로드 처리
-def update_graph():
-    if st.session_state.get("audio_data"):
-        st.session_state.audio_data = st.session_state.audio_data
-    else:
-        st.session_state.audio_data = None
+# 오디오 버퍼 초기화
+audio_buffer = []
 
-st.experimental_singleton(update_graph)
+# 오디오 스트림 시작
+stream = sd.InputStream(callback=audio_callback, channels=1, samplerate=SAMPLING_RATE, blocksize=BUFFER_SIZE)
+stream.start()
+
+# 실시간 피치 그래프 그리기
+fig, ax = plt.subplots()
+line, = ax.plot([], [], lw=2)
+ax.set_ylim(0, 1000)
+ax.set_xlim(0, BUFFER_SIZE)
+ax.set_xlabel("Samples")
+ax.set_ylabel("Frequency (Hz)")
+
+def update_plot():
+    if len(audio_buffer) >= BUFFER_SIZE:
+        data = np.array(audio_buffer[-BUFFER_SIZE:])
+        audio_buffer.clear()
+        
+        # FFT를 사용하여 주파수 스펙트럼 계산
+        fft_spectrum = np.fft.rfft(data)
+        freqs = np.fft.rfftfreq(len(data), 1/SAMPLING_RATE)
+        magnitudes = np.abs(fft_spectrum)
+        
+        # 피크 주파수 찾기
+        peaks, _ = find_peaks(magnitudes, height=0.1)
+        if peaks.size > 0:
+            pitch = freqs[peaks[0]]
+        else:
+            pitch = 0
+        
+        # 그래프 업데이트
+        line.set_data(np.arange(len(data)), data)
+        ax.set_title(f"Detected Pitch: {pitch:.2f} Hz")
+        fig.canvas.draw()
+        fig.canvas.flush_events()
+
+# 스트림릿 앱 메인 루프
+while True:
+    update_plot()
+    st.pyplot(fig)
