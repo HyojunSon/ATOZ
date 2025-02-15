@@ -26,12 +26,16 @@ class AudioProcessor(AudioProcessorBase):
 st.title("실시간 피치 그래프")
 st.write("음성 데이터를 입력 받아 실시간으로 피치 그래프를 그립니다.")
 
+def on_error(e):
+    st.error(f"WebRTC 오류: {e}")
+
 webrtc_ctx = webrtc_streamer(
     key="example",
     mode=WebRtcMode.SENDRECV,
     audio_processor_factory=AudioProcessor,
     media_stream_constraints={"audio": True, "video": False},
     async_processing=True,
+    on_error=on_error,
 )
 
 if webrtc_ctx.state.playing:
@@ -41,3 +45,9 @@ else:
 
 # WebRTC 연결 상태 확인
 st.write(f"WebRTC 상태: {webrtc_ctx.state}")
+
+# WebRTC 상태 변경 시 로그 출력
+def on_state_change(state):
+    st.write(f"WebRTC 상태 변경: {state}")
+
+webrtc_ctx.on_state_change = on_state_change
