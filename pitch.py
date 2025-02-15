@@ -31,7 +31,7 @@ if st.button("Start Recording"):
     duration = 5  # 녹음 시간 (초)
     
     st.write("Recording...")
-    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float64')
+    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='float64', device=1)
     sd.wait()  # 녹음이 끝날 때까지 대기
     st.write("Recording finished.")
     
